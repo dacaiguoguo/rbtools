@@ -522,6 +522,13 @@ class Command(object):
                         'user@domain,password). Visit https://msdn.microsoft.'
                         'com/en-us/library/hh190725.aspx to learn about '
                         'saving credentials for reuse.'),
+            Option('--tf-cmd',
+                   dest='tf_cmd',
+                   default=None,
+                   metavar='TF_CMD',
+                   config_key='TF_CMD',
+                   help='The full path of where to find the tf command. This '
+                        'overrides any detected path.'),
         ]
     )
 
@@ -718,11 +725,25 @@ class Command(object):
         tool.capabilities = self.get_capabilities(api_root)
 
     def get_server_url(self, repository_info, tool):
-        """Returns the Review Board server url."""
+        """Return the Review Board server url.
+
+        Args:
+            repository_info (rbtools.clients.RepositoryInfo, optional):
+                Information about the current repository
+
+            tool (rbtools.clients.SCMClient, optional):
+                The repository client.
+
+        Returns:
+            unicode:
+            The server URL.
+        """
         if self.options.server:
             server_url = self.options.server
-        else:
+        elif tool:
             server_url = tool.scan_for_server(repository_info)
+        else:
+            server_url = None
 
         if not server_url:
             print('Unable to find a Review Board server for this source code '
@@ -743,6 +764,23 @@ class Command(object):
             if getattr(self.options, 'diff_filename', None) == '-':
                 die('HTTP authentication is required, but cannot be '
                     'used with --diff-filename=-')
+
+            # Interactive prompts don't work correctly when input doesn't come
+            # from a terminal. This could seem to be a rare case not worth
+            # worrying about, but this is what happens when using native
+            # Python in Cygwin terminal emulator under Windows and it's very
+            # puzzling to the users, especially because stderr is also _not_
+            # flushed automatically in this case, so the program just appears
+            # to hang.
+            if not sys.stdin.isatty():
+                logging.error('Authentication is required but input is not a '
+                              'tty.')
+                if sys.platform == 'win32':
+                    logging.info('Check that you are not running this script '
+                                 'from a Cygwin terminal emulator (or use '
+                                 'Cygwin Python to run it).')
+
+                raise CommandError('Unable to log in to Review Board.')
 
             print()
             print('Please log in to the Review Board server at %s.' %

@@ -31,6 +31,7 @@ class GitClient(SCMClient):
     can_merge = True
     can_push_upstream = True
     can_delete_branch = True
+    can_branch = True
 
     def __init__(self, **kwargs):
         super(GitClient, self).__init__(**kwargs)
@@ -535,7 +536,13 @@ class GitClient(SCMClient):
             # changed files and run `git diff` on each un-excluded file
             # individually.
             changed_files_cmd = git_cmd + ['diff-tree'] + diff_cmd_params
-            if self.type == 'git':
+
+            if self.type in ('svn', 'perforce'):
+                # We don't want to send -u along to git diff-tree because it
+                # will generate diff information along with the list of
+                # changed files.
+                changed_files_cmd.remove('-u')
+            elif self.type == 'git':
                 changed_files_cmd.append('-r')
 
             changed_files = execute(
@@ -852,7 +859,12 @@ class GitClient(SCMClient):
                             remote_branch)
 
     def get_current_branch(self):
-        """Returns the name of the current branch."""
+        """Return the name of the current branch.
+
+        Returns:
+            bytes:
+            A string with the name of the current branch.
+        """
         return execute([self.git, "rev-parse", "--abbrev-ref", "HEAD"],
                        ignore_errors=True).strip()
 

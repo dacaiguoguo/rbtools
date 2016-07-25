@@ -1,6 +1,5 @@
 from __future__ import print_function, unicode_literals
 
-import fnmatch
 import logging
 import marshal
 import os
@@ -10,6 +9,9 @@ import socket
 import stat
 import string
 import subprocess
+import sys
+from fnmatch import fnmatch
+from locale import getpreferredencoding
 
 from rbtools.clients import SCMClient, RepositoryInfo
 from rbtools.clients.errors import (AmendError,
@@ -232,15 +234,19 @@ class PerforceClient(SCMClient):
         if client_root is None:
             return None
 
-        norm_cwd = os.path.normcase(os.path.realpath(os.getcwd()) +
-                                    os.path.sep)
-        norm_client_root = os.path.normcase(os.path.realpath(client_root) +
-                                            os.path.sep)
+        # A 'null' client root is a valid configuration on Windows
+        # client, so don't enforce the repository directory check.
+        if (client_root.lower() != 'null' or
+            not sys.platform.startswith('win')):
+            norm_cwd = os.path.normcase(os.path.realpath(os.getcwd()) +
+                                        os.path.sep)
+            norm_client_root = os.path.normcase(os.path.realpath(client_root) +
+                                                os.path.sep)
 
-        # Don't accept the repository if the current directory is outside the
-        # root of the Perforce client.
-        if not norm_cwd.startswith(norm_client_root):
-            return None
+            # Don't accept the repository if the current directory
+            # is outside the root of the Perforce client.
+            if not norm_cwd.startswith(norm_client_root):
+                return None
 
         try:
             parts = repository_path.split(':')
@@ -662,12 +668,13 @@ class PerforceClient(SCMClient):
         # this to remove the server-side implementation and just implement
         # --guess-summary and --guess-description, but that would likely
         # create a lot of unhappy users.
-        tip = revisions['tip']
+        if revisions is not None:
+            tip = revisions['tip']
 
-        if tip.startswith(self.REVISION_PENDING_CLN_PREFIX):
-            tip = tip[len(self.REVISION_PENDING_CLN_PREFIX):]
-            if tip != self.REVISION_DEFAULT_CLN:
-                return tip
+            if tip.startswith(self.REVISION_PENDING_CLN_PREFIX):
+                tip = tip[len(self.REVISION_PENDING_CLN_PREFIX):]
+                if tip != self.REVISION_DEFAULT_CLN:
+                    return tip
 
         return None
 
@@ -1337,7 +1344,7 @@ class PerforceClient(SCMClient):
         change = self.p4.change(changelist)
 
         if len(change) == 1 and 'Description' in change[0]:
-            return change[0]['Description']
+            return change[0]['Description'].decode(getpreferredencoding())
         else:
             return ''
 
@@ -1408,9 +1415,9 @@ class PerforceClient(SCMClient):
         """
         for pattern in exclude_patterns:
             if pattern.startswith('//'):
-                if fnmatch.fnmatch(depot_file, pattern):
+                if fnmatch(depot_file, pattern):
                     return True
-            elif local_file and fnmatch.fnmatch(local_file, pattern):
+            elif local_file and fnmatch(local_file, pattern):
                 return True
 
         return False
